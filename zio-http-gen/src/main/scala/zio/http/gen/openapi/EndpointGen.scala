@@ -410,18 +410,20 @@ final case class EndpointGen(config: Config) {
     // TODO: Resolve query and header parameters from components
     val queryParams         = params.collect {
       case p if p.in == "query" =>
+        val required = p.required.getOrElse(false)
         p.schema.get match {
           case ReferenceOr.Or(value)            =>
             schemaToQueryParamCodec(
               value,
               openAPI,
               p.name,
+              required = required,
             )
           // references are only possible in case of aliased primitives
           case ReferenceOr.Reference(ref, _, _) =>
             val baref  = ref.replaceFirst("^#/components/schemas/", "")
             val schema = resolveSchemaRef(openAPI, baref)
-            val qCodec = schemaToQueryParamCodec(schema, openAPI, p.name)
+            val qCodec = schemaToQueryParamCodec(schema, openAPI, p.name, required = required)
             if (!config.generateSafeTypeAliases) qCodec
             else qCodec.copy(queryType = CodecType.Aliased(qCodec.queryType, baref))
         }
@@ -709,7 +711,8 @@ final case class EndpointGen(config: Config) {
     schema: JsonSchema,
     openAPI: OpenAPI,
     name: String,
-  ): Code.QueryParamCode = schemaToQueryParamCodecHelper(schema, openAPI, name)
+    required: Boolean = true,
+  ): Code.QueryParamCode = schemaToQueryParamCodecHelper(schema, openAPI, name).copy(required = required)
 
   @tailrec
   private def schemaToQueryParamCodecHelper(
